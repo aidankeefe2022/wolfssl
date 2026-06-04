@@ -37509,14 +37509,14 @@ static void DumpHeader(Asn1* asn1, Asn1PrintOptions* opts)
 static void PrintInfo(Asn1* asn1, Asn1PrintOptions* opts)
 {
     /* Print offset of this ASN.1 item. */
-    XFPRINTF(asn1->file, "%4d: ", asn1->offset);
-    /* Print length of header. */
-    XFPRINTF(asn1->file, "%1d ", asn1->curr - asn1->offset);
-    /* Print data length. */
-    XFPRINTF(asn1->file, "%c%4d%c", asn1->item.cons ? '[' : '+', asn1->item.len,
-                      asn1->item.cons ? ']' : ' ');
+    XFPRINTF(asn1->file, "%4d:", asn1->offset);
     /* Print depth. */
-    XFPRINTF(asn1->file, " %s(%d)", (asn1->depth < 10) ? " " : "", asn1->depth);
+    XFPRINTF(asn1->file, "d=%d ", asn1->depth);
+    /* Print length of header. */
+    XFPRINTF(asn1->file, "hl=%1d ", asn1->curr - asn1->offset);
+    /* Print data length. */
+    XFPRINTF(asn1->file, "l=%4d %s:",asn1->item.len,
+                      asn1->item.cons ? "cons" : "prim");
     if (!opts->draw_branch) {
         /* Indent to depth as required. */
         XFPRINTF(asn1->file, "%*s ", asn1->depth * opts->indent, "");
