@@ -5456,7 +5456,11 @@ blinding by defining WC_BLINDING_NO_RNG_ACKNOWLEDGE_WEAKNESS."
  * ---------------------------------------------------------------------------*/
 
 /* RC4: Per RFC7465 Feb 2015, the cipher suite has been deprecated due to a
- * number of exploits capable of decrypting portions of encrypted messages. */
+ * number of exploits capable of decrypting portions of encrypted messages.
+ * An implementation supporting D/TLS 1.3 MUST NOT offer or negotiate RC4
+ * cipher suites in any protocol version (RFC 8446 Appendix D.5). RC4 remains
+ * available to wolfCrypt for non-TLS uses such as PKCS#12 and Kerberos; the
+ * TLS cipher suites are dropped in wolfssl/internal.h. */
 #ifndef WOLFSSL_ALLOW_RC4
     #undef  NO_RC4
     #define NO_RC4

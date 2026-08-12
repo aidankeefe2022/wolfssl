@@ -12915,6 +12915,12 @@ fi
 if test "$ENABLED_ARC4" = "yes"
 then
     AM_CFLAGS="$AM_CFLAGS -DWOLFSSL_ALLOW_RC4"
+    if test "$ENABLED_TLS13" = "yes" || test "$ENABLED_DTLS13" = "yes"
+    then
+        # RC4 stays available to wolfCrypt, but per RFC 8446 Appendix D.5 the
+        # RC4 TLS cipher suites are not built when D/TLS 1.3 is enabled.
+        AC_MSG_NOTICE([RC4 cipher suites disabled: D/TLS 1.3 is enabled (RFC 8446 D.5)])
+    fi
 fi
 
 

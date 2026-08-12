@@ -3378,3 +3378,33 @@ int test_record_size_cache_invalidated_on_renegotiation(void)
 #endif
     return EXPECT_RESULT();
 }
+
+/* A D/TLS 1.3 capable implementation MUST NOT negotiate RC4 cipher suites in
+ * any protocol version (RFC 8446 Appendix D.5, RFC 9325 section 4.1).  The RC4
+ * suites are not built at all in such a configuration, so none may be
+ * selectable by name and none may appear in the built-in suite list. */
+int test_tls_no_rc4_suites(void)
+{
+    EXPECT_DECLS;
+#if (defined(WOLFSSL_TLS13) || defined(WOLFSSL_DTLS13)) && \
+    !defined(NO_WOLFSSL_CLIENT)
+    WOLFSSL_CTX *ctx = NULL;
+    char ciphers[WOLFSSL_CIPHER_LIST_MAX_SIZE];
+
+    ExpectNotNull(ctx = wolfSSL_CTX_new(wolfSSLv23_client_method()));
+    /* No RC4 suite may be selectable by name. */
+    ExpectIntNE(wolfSSL_CTX_set_cipher_list(ctx, "RC4-SHA"), WOLFSSL_SUCCESS);
+    ExpectIntNE(wolfSSL_CTX_set_cipher_list(ctx, "RC4-MD5"), WOLFSSL_SUCCESS);
+    ExpectIntNE(wolfSSL_CTX_set_cipher_list(ctx, "ECDHE-RSA-RC4-SHA"),
+            WOLFSSL_SUCCESS);
+
+    /* None may appear in the built-in suite list either. */
+    XMEMSET(ciphers, 0, sizeof(ciphers));
+    ExpectIntEQ(wolfSSL_get_ciphers(ciphers, (int)sizeof(ciphers)),
+            WOLFSSL_SUCCESS);
+    ExpectNull(XSTRSTR(ciphers, "RC4"));
+
+    wolfSSL_CTX_free(ctx);
+#endif
+    return EXPECT_RESULT();
+}

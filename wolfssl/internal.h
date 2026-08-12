@@ -256,6 +256,16 @@
     #error "You are trying to build max strength with requirements disabled."
 #endif
 
+/* A TLS 1.3 capable implementation MUST NOT offer or negotiate RC4 cipher
+ * suites in any protocol version.
+ * https://www.rfc-editor.org/rfc/rfc8446#appendix-D.5
+ * RC4 stays available to wolfCrypt (PKCS#12, Kerberos, ...), only the TLS
+ * cipher suites are dropped.
+ * Use a separate define (undef'ed later) to simplify macro logic. */
+#if defined(WOLFSSL_TLS13) || defined(WOLFSSL_DTLS13)
+#define WSSL_NO_RC4_SUITES
+#endif
+
 #ifndef WOLFSSL_NO_TLS12
 
 #ifndef WOLFSSL_MAX_STRENGTH
@@ -275,9 +285,11 @@
 #endif
 
 #ifndef WOLFSSL_AEAD_ONLY
-    #if !defined(NO_RSA) && !defined(NO_RC4) && !defined(WSSL_HARDEN_TLS)
+    #if !defined(NO_RSA) && !defined(NO_RC4) && !defined(WSSL_HARDEN_TLS) && \
+        !defined(WSSL_NO_RC4_SUITES)
         /* MUST NOT negotiate RC4 cipher suites
-         * https://www.rfc-editor.org/rfc/rfc9325#section-4.1 */
+         * https://www.rfc-editor.org/rfc/rfc9325#section-4.1
+         * https://www.rfc-editor.org/rfc/rfc8446#appendix-D.5 */
         #if defined(WOLFSSL_STATIC_RSA)
             #if !defined(NO_SHA)
                 #define BUILD_SSL_RSA_WITH_RC4_128_SHA
@@ -606,9 +618,11 @@
             #define BUILD_TLS_ECDHE_ECDSA_WITH_ARIA_128_GCM_SHA256
             #define BUILD_TLS_ECDHE_ECDSA_WITH_ARIA_256_GCM_SHA384
         #endif /* HAVE_ARIA */
-        #if !defined(NO_RC4) && !defined(WSSL_HARDEN_TLS)
+        #if !defined(NO_RC4) && !defined(WSSL_HARDEN_TLS) && \
+            !defined(WSSL_NO_RC4_SUITES)
             /* MUST NOT negotiate RC4 cipher suites
-             * https://www.rfc-editor.org/rfc/rfc9325#section-4.1 */
+             * https://www.rfc-editor.org/rfc/rfc9325#section-4.1
+             * https://www.rfc-editor.org/rfc/rfc8446#appendix-D.5 */
             #if !defined(NO_SHA)
                 #if !defined(NO_RSA)
                     #ifndef WOLFSSL_AEAD_ONLY
@@ -971,9 +985,11 @@
     #define BUILD_AES
 #endif
 
-#if !defined(NO_RC4) && !defined(WSSL_HARDEN_TLS)
+#if !defined(NO_RC4) && !defined(WSSL_HARDEN_TLS) && \
+    !defined(WSSL_NO_RC4_SUITES)
     /* MUST NOT negotiate RC4 cipher suites
-     * https://www.rfc-editor.org/rfc/rfc9325#section-4.1 */
+     * https://www.rfc-editor.org/rfc/rfc9325#section-4.1
+     * https://www.rfc-editor.org/rfc/rfc8446#appendix-D.5 */
     #undef  BUILD_ARC4
     #define BUILD_ARC4
 #endif
@@ -1016,6 +1032,7 @@
 #endif
 
 #undef WSSL_HARDEN_TLS
+#undef WSSL_NO_RC4_SUITES
 
 /* CA Names feature */
 #if !defined(WOLFSSL_NO_CA_NAMES) && defined(OPENSSL_EXTRA)
