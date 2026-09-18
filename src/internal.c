@@ -10076,6 +10076,7 @@ void wolfSSL_ResourceFree(WOLFSSL* ssl)
 #endif /* HAVE_TLS_EXTENSIONS */
 #ifdef WOLFSSL_CERT_COMPRESSION
     wc_CompressionData_Free(ssl->compressedCert);
+    XFREE(ssl->compressedCert, ssl->heap, DYNAMIC_TYPE_SSL);
     ssl->compressedCert = NULL;
 #endif
 #if defined(WOLFSSL_APACHE_MYNEWT) && !defined(WOLFSSL_LWIP)
@@ -10425,6 +10426,7 @@ void FreeHandshakeResources(WOLFSSL* ssl)
 
 #ifdef WOLFSSL_CERT_COMPRESSION
     wc_CompressionData_Free(ssl->compressedCert);
+    XFREE(ssl->compressedCert, ssl->heap, DYNAMIC_TYPE_SSL);
     ssl->compressedCert = NULL;
 #endif
 
