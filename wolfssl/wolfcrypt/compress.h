@@ -34,6 +34,7 @@
     extern "C" {
 #endif
 
+
 enum wc_CompressionAlgs {
 /* compression alg Ids used by tls certificate compression defined
  * in RFC 8879, They cannot change but are defined here so they are consitent
@@ -48,6 +49,8 @@ enum wc_CompressionAlgs {
      * will never be assigned to a registered algorithm. */
     WC_CUSTOM_COMPRESSION = 16384,
 };
+/* number of non 0 enum values update as more are added */
+#define WC_COMPRESSION_MAX_NUM_OF_ALGS 4
 
 /**
  * @breif Check if a compression alg is supported

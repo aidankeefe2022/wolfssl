@@ -170,13 +170,8 @@
     #include <limits.h>
 #endif
 
-
-#ifdef HAVE_LIBZ
-    #include "zlib.h"
-#endif
-
-#ifdef WOLFSSL_CERT_COMPRESSION
-    #include <wolfssl/wolfcrypt/compress.h>
+#if defined(WOLFSSL_CERT_COMPRESSION) || defined(HAVE_LIBZ)
+#include <wolfssl/wolfcrypt/compress.h>
 #endif
 
 #ifdef WOLFSSL_ASYNC_CRYPT
@@ -4456,6 +4451,12 @@ struct WOLFSSL_CTX {
     word16          group[WOLFSSL_MAX_GROUP_COUNT];
     byte            numGroups;
 #endif
+#ifdef WOLFSSL_CERT_COMPRESSION
+    /* list of offered compression algs, copied to each new WOLFSSL.
+     * NULL = use the built-in default list */
+    byte                     compressionAlgPrefListLen;
+    enum wc_CompressionAlgs* compressionAlgPrefList;
+#endif
 #ifdef WOLFSSL_EARLY_DATA
     word32          maxEarlyDataSz;
 #if defined(WOLFSSL_TLS13) && defined(HAVE_SESSION_TICKET) && !defined(NO_TLS)
@@ -7100,6 +7101,9 @@ struct WOLFSSL {
     /* RFC 8879 algorithm ID; WC_NO_COMPRESSION = none negotiated */
     enum wc_CompressionAlgs peerCertCompressionAlg;
     wc_CompressionData* compressedCert;
+    /* list of offered compression args */
+    byte compressionAlgPrefListLen;
+    enum wc_CompressionAlgs* compressionAlgPrefList;
 #endif
 #if defined(OPENSSL_EXTRA)
     WOLFSSL_STACK* supportedCiphers; /* Used in wolfSSL_get_ciphers_compat */

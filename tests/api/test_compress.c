@@ -169,6 +169,106 @@ static int test_wc_CompressionData_RoundTrip(void)
     return EXPECT_RESULT();
 }
 
+static const struct {
+    enum wc_CompressionAlgs alg;
+    byte* compressedData;
+    word32 compressedSz; /* compressed data may contain 0x00 bytes */
+    byte* uncompressedData;} compressedTestVectors[] = {
+    /* Hello, world! Test vector for zlib. */
+    {WC_ZLIB,
+    /* compressed data */
+    (byte*)"\x78\x9c\xf3\x48\xcd\xc9\xc9\xd7\x51\x28\xcf\x2f"
+        "\xca\x49\x51\x54\x08\x49\x2d\x2e\x51\x28\x4b\x4d"
+        "\x2e\xc9\x2f\x52\x48\xcb\x2f\x52\xa8\xca\xc9\x4c"
+        "\xd2\x53\xf0\x20\xac\x06\x00\x7d\xd8\x18\xe5",
+    47,
+    /* uncompressed message */
+    (byte*)"Hello, world! Test vector for zlib. "
+        "Hello, world! Test vector for zlib."},
+    /* Hello, world! Test vector for brotli. */
+    {WC_BROTLI,
+    /* compressed data */
+    (byte*)"\xa1\x50\x02\xc0\x2f\x7a\xc3\xeb\x9d\xe3\xf1\xdc"
+        "\x9e\x9b\x28\xa5\x56\x92\xce\x61\x10\x45\xfa\xd1"
+        "\x1a\xd4\x20\xd1\x4d\xdc\xa9\x92\x94\x19\x9f\x71"
+        "\x5c\xd4\xed\xcb\x9b\x56\x98",
+    43,
+    /* uncompressed message */
+    (byte*)"Hello, world! Test vector for brotli. "
+        "Hello, world! Test vector for brotli."},
+    /* repeated string test vector for brotli, exercises back references */
+    {WC_BROTLI,
+    /* compressed data */
+    (byte*)"\xa1\x48\x02\xc0\x2f\x6e\x63\xeb\x3a\x87\xcf\xf1"
+        "\x1a\x41\x20\x08\x11\x14\x4f\x85\x00\xd5\xc7\x2d"
+        "\x11\xb5\x39\x0f\x00",
+    29,
+    /* uncompressed message */
+    (byte*)"wolfSSL brotli wolfSSL brotli wolfSSL brotli wolfSSL brotli "
+        "wolfSSL brotli"},
+    /* Hello, world! Test vector for zstd. */
+    {WC_ZSTD,
+    /* compressed data */
+    (byte*)"\x28\xb5\x2f\xfd\x20\x47\x6d\x01\x00\x54\x02\x48"
+        "\x65\x6c\x6c\x6f\x2c\x20\x77\x6f\x72\x6c\x64\x21"
+        "\x20\x54\x65\x73\x74\x20\x76\x65\x63\x74\x6f\x72"
+        "\x20\x66\x6f\x72\x20\x7a\x73\x74\x64\x2e\x20\x48"
+        "\x01\x00\x3d\x8e\x7a\x02",
+    54,
+    /* uncompressed message */
+    (byte*)"Hello, world! Test vector for zstd. "
+        "Hello, world! Test vector for zstd."},
+    /* repeated string test vector for zstd, exercises a compressed block */
+    {WC_ZSTD,
+    /* compressed data */
+    (byte*)"\x28\xb5\x2f\xfd\x20\x40\xa5\x00\x00\x70\x77\x6f"
+        "\x6c\x66\x53\x53\x4c\x20\x7a\x73\x74\x64\x20\x77"
+        "\x01\x00\x43\x34\x95",
+    29,
+    /* uncompressed message */
+    (byte*)"wolfSSL zstd wolfSSL zstd wolfSSL zstd wolfSSL zstd "
+        "wolfSSL zstd"},
+};
+
+static int test_wc_CompressionData_InitWithCompressedData(void)
+{
+    EXPECT_DECLS;
+    word32 i;
+    wc_CompressionData cd;
+    for (i = 0; i < XELEM_CNT(compressedTestVectors); i ++) {
+        if (!wc_isCompressionAlgSupported(compressedTestVectors[i].alg)) {
+            /* skip test */
+            continue;
+        }
+        ExpectIntEQ(wc_CompressionData_InitComp(&cd,
+                compressedTestVectors[i].uncompressedData,
+                (word32)XSTRLEN(
+                    (char*)compressedTestVectors[i].uncompressedData),
+                compressedTestVectors[i].alg), 0);
+        ExpectIntEQ(wc_CompressionData_Compress(&cd), 0);
+        ExpectIntEQ((int)cd.compressedSz,
+                (int)compressedTestVectors[i].compressedSz);
+        ExpectIntEQ(XMEMCMP(cd.data, compressedTestVectors[i].compressedData,
+                    cd.compressedSz), 0);
+        wc_CompressionData_Free(&cd);
+
+        ExpectIntEQ(wc_CompressionData_InitDeComp(&cd,
+                compressedTestVectors[i].compressedData,
+                compressedTestVectors[i].compressedSz,
+                (word32)XSTRLEN(
+                    (char*)compressedTestVectors[i].uncompressedData),
+                compressedTestVectors[i].alg), 0);
+        ExpectIntEQ(wc_CompressionData_Decompress(&cd), 0);
+        ExpectIntEQ((int)cd.uncompressedSz,
+                (int)XSTRLEN((char*)compressedTestVectors[i].uncompressedData));
+        ExpectIntEQ(XMEMCMP(cd.data, compressedTestVectors[i].uncompressedData,
+                    cd.uncompressedSz), 0);
+        wc_CompressionData_Free(&cd);
+    }
+
+    return EXPECT_RESULT();
+}
+
 static int test_wc_CompressionData_BadArgs(void)
 {
     EXPECT_DECLS;
@@ -181,6 +281,7 @@ static int test_wc_CompressionData_BadArgs(void)
         if (!wc_isCompressionAlgSupported(algList[i])) {
             continue;
         }
+        /* --- init with uncompressed data --- */
         ExpectIntNE(wc_CompressionData_InitComp(NULL, data, sizeof(data),
                     algList[i]), 0);
         ExpectIntNE(wc_CompressionData_Compress(&cd), 0);
@@ -200,6 +301,29 @@ static int test_wc_CompressionData_BadArgs(void)
                     badAlgId), 0);
         ExpectIntNE(wc_CompressionData_Compress(&cd), 0);
         ExpectIntNE(wc_CompressionData_Decompress(&cd), 0);
+        /* --- init with uncompressed data --- */
+
+        /* --- init with compressed data --- */
+        ExpectIntNE(wc_CompressionData_InitDeComp(NULL, data, sizeof(data),
+                    sizeof(data), algList[i]), 0);
+        ExpectIntNE(wc_CompressionData_Decompress(&cd), 0);
+        ExpectIntNE(wc_CompressionData_Compress(&cd), 0);
+
+        ExpectIntNE(wc_CompressionData_InitDeComp(&cd, NULL, sizeof(data),
+                    sizeof(data), algList[i]), 0);
+        ExpectIntNE(wc_CompressionData_Decompress(&cd), 0);
+        ExpectIntNE(wc_CompressionData_Compress(&cd), 0);
+
+        ExpectIntNE(wc_CompressionData_InitDeComp(&cd, data, sizeof(data),
+                    0, algList[i]), 0);
+        ExpectIntNE(wc_CompressionData_Decompress(&cd), 0);
+        ExpectIntNE(wc_CompressionData_Compress(&cd), 0);
+
+        ExpectIntNE(wc_CompressionData_InitDeComp(&cd, data, sizeof(data),
+                    sizeof(data), badAlgId), 0);
+        ExpectIntNE(wc_CompressionData_Decompress(&cd), 0);
+        ExpectIntNE(wc_CompressionData_Compress(&cd), 0);
+        /* --- init with compressed data --- */
 
         ExpectIntNE(wc_CompressionData_Compress(NULL), 0);
         ExpectIntNE(wc_CompressionData_Decompress(NULL), 0);
@@ -212,6 +336,8 @@ int test_wc_CompressionData(void)
 {
     EXPECT_DECLS;
     ExpectIntEQ(test_wc_CompressionData_RoundTrip(), TEST_SUCCESS);
+    ExpectIntEQ(test_wc_CompressionData_InitWithCompressedData(),
+            TEST_SUCCESS);
     ExpectIntEQ(test_wc_CompressionData_BadArgs(), TEST_SUCCESS);
     return EXPECT_RESULT();
 }

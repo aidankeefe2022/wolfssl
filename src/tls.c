@@ -8237,25 +8237,22 @@ static int TLSX_SetSignatureAlgorithmsCert(TLSX** extensions,
 #if defined(WOLFSSL_TLS13) && !defined(NO_CERTS) && \
 defined(WOLFSSL_CERT_COMPRESSION)
 
-/* The supported list of compression algs in wolfSSL
- * stored in wire order ready to use
- *
- * These are also our order of preference */
-/* TODO: allow for custom ordering */
-static const byte TLSX_CertCompression_Supported_Algs[] = {
+/* Default list of algs for when user does not set a custom list
+ * for this extension
+ * TODO: list name of setter func
+ */
+static const enum wc_CompressionAlgs TLSX_CertCompression_DefaultAlgs[] = {
 #ifdef HAVE_CUSTOM_COMPRESSION
-    /* split the word16 over 2 bytes */
-    (byte)((WC_CUSTOM_COMPRESSION >> 8) & 0xFF),
-    (byte)(WC_CUSTOM_COMPRESSION & 0xFF),
-#endif
-#ifdef HAVE_LIBZ
-    (byte)0x00, (byte)WC_ZLIB,
+    WC_CUSTOM_COMPRESSION,
 #endif
 #ifdef HAVE_BROTLI
-    (byte)0x00, (byte)WC_BROTLI,
+    WC_BROTLI,
+#endif
+#ifdef HAVE_LIBZ
+    WC_ZLIB,
 #endif
 #ifdef HAVE_ZSTD
-    (byte)0x00, (byte)WC_ZSTD,
+    WC_ZSTD,
 #endif
 };
 
@@ -8267,25 +8264,55 @@ static void TLSX_CertCompression_FreeAll(byte* data, void* heap)
         XFREE(data, heap, DYNAMIC_TYPE_TLSX);
 }
 
-static int TLSX_UseCertCompression(TLSX** extensions, void* heap)
+static int TLSX_UseCertCompression(WOLFSSL* ssl, void* heap)
 {
     int ret = 0;
     TLSX* extension;
 
-    if (extensions == NULL) {
+    if (ssl == NULL) {
         return BAD_FUNC_ARG;
     }
 
-    extension = TLSX_Find(*extensions, TLSX_CERT_COMPRESSION);
+    extension = TLSX_Find(ssl->extensions, TLSX_CERT_COMPRESSION);
     if (extension == NULL) {
-        byte* data = (byte*)XMALLOC(sizeof(TLSX_CertCompression_Supported_Algs)
-                + 1, heap, DYNAMIC_TYPE_TLSX);
+        /* certificate_compression(27) extension format is:
+         * |num following bytes
+         * v
+         * +-------------------------+
+         * |<1 byte>|<2 byte>[0..127]|
+         * +-------------------------+
+         *          ^
+         *          | list of alg Ids
+         */
+        byte* data = NULL;
+        word32 i;
+        byte  len = 1; /* 1 for the size of the len byte */
+        byte* dataPtr;
+        enum wc_CompressionAlgs* list = NULL;
+        if (ssl->compressionAlgPrefList == NULL) {
+            len += XELEM_CNT(TLSX_CertCompression_DefaultAlgs) *
+                OPAQUE16_LEN;
+            list = (enum wc_CompressionAlgs*)TLSX_CertCompression_DefaultAlgs;
+        }
+        /* use user list if present */
+        else {
+            len += ssl->compressionAlgPrefListLen * OPAQUE16_LEN;
+            list = ssl->compressionAlgPrefList;
+        }
+        data = (byte*)XMALLOC(len, heap, DYNAMIC_TYPE_TLSX);
         if (data == NULL)
             return MEMORY_ERROR;
-        *data = (byte)sizeof(TLSX_CertCompression_Supported_Algs);
-        XMEMCPY(data + OPAQUE8_LEN,
-                TLSX_CertCompression_Supported_Algs, *data);
-        ret = TLSX_Push(extensions, TLSX_CERT_COMPRESSION, data, heap);
+        /* length of the alg list so sub self */
+        *data = len - sizeof(*data);
+        /* skip past len byte */
+        dataPtr = data + 1;
+        for(i = 0; i < (word32)((len - 1) / 2); i++) {
+            /* write each alg Id in to wire order list of
+             * Opaque 16s */
+            c16toa((word16)list[i], dataPtr);
+            dataPtr += 2;
+        }
+        ret = TLSX_Push(&ssl->extensions, TLSX_CERT_COMPRESSION, data, heap);
     }
     return ret;
 }
@@ -16815,7 +16842,7 @@ int TLSX_PopulateExtensions(WOLFSSL* ssl, byte isServer)
 #endif
 
 #if !defined(NO_CERTS) && defined(WOLFSSL_CERT_COMPRESSION)
-        ret = TLSX_UseCertCompression(&ssl->extensions, ssl->heap);
+        ret = TLSX_UseCertCompression(ssl, ssl->heap);
         if (ret != 0)
             return ret;
 #endif
@@ -16865,7 +16892,7 @@ int TLSX_PopulateExtensions(WOLFSSL* ssl, byte isServer)
      * CertificateRequest, so only advertise when we will actually ask the
      * client for a certificate. */
     if (isServer && ssl->options.verifyPeer) {
-        ret = TLSX_UseCertCompression(&ssl->extensions, ssl->heap);
+        ret = TLSX_UseCertCompression(ssl, ssl->heap);
         if (ret != 0)
             return ret;
     }

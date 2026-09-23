@@ -11238,12 +11238,13 @@ static int SendTls13CompressedCertificate(WOLFSSL* ssl)
 
     Tls13CertificateSendDone(ssl, ret);
 
-    if (ret != WC_NO_ERR_TRACE(WANT_WRITE)
+    if ((ret != WC_NO_ERR_TRACE(WANT_WRITE)
 #ifdef WOLFSSL_DTLS13
         /* Dtls13HandshakeSend has sent the entire message so we want
          * to free no matter what */
         || ssl->options.dtls
 #endif
+        )
             ) {
         wc_CompressionData_Free(ssl->compressedCert);
         XFREE(ssl->compressedCert, ssl->heap, DYNAMIC_TYPE_SSL);
@@ -17586,6 +17587,87 @@ int wolfSSL_CTX_no_ticket_TLSv13(WOLFSSL_CTX* ctx)
     return 0;
 }
 
+#ifdef WOLFSSL_CERT_COMPRESSION
+/* Validate a list of certificate compression algorithms and replace the list
+ * in dst with a copy of it.
+ *
+ * dst    The list to replace; freed and set to the new copy on success.
+ * dstLen Number of algorithm IDs in dst; set on success.
+ * algs   RFC 8879 algorithm IDs, most preferred first.
+ * count  Number of algorithm IDs.
+ * heap   Heap hint for the allocation.
+ * returns BAD_FUNC_ARG when algs is NULL, count is out of range, or an
+ *         algorithm is not supported, MEMORY_E on allocation failure and
+ *         WOLFSSL_SUCCESS on success.
+ */
+static int CertCompression_SetAlgs(enum wc_CompressionAlgs** dst,
+    byte* dstLen, const enum wc_CompressionAlgs* algs, int count, void* heap)
+{
+    int i;
+    enum wc_CompressionAlgs* list;
+
+    if (algs == NULL || count < 1 || count > 127)
+        return BAD_FUNC_ARG;
+    for (i = 0; i < count; i++) {
+        if (!wc_isCompressionAlgSupported(algs[i]))
+            return BAD_FUNC_ARG;
+    }
+
+    list = (enum wc_CompressionAlgs*)XMALLOC(sizeof(*list) * (size_t)count,
+        heap, DYNAMIC_TYPE_TLSX);
+    if (list == NULL)
+        return MEMORY_E;
+    XMEMCPY(list, algs, sizeof(*list) * (size_t)count);
+    XFREE(*dst, heap, DYNAMIC_TYPE_TLSX);
+    *dst = list;
+    *dstLen = (byte)count;
+    (void)heap;
+
+    return WOLFSSL_SUCCESS;
+}
+
+/* Set the certificate compression algorithms to offer, in order of
+ * preference, for every WOLFSSL created from this context afterwards.
+ * Replaces the built-in default list.
+ *
+ * ctx    The SSL/TLS CTX object.
+ * algs   RFC 8879 algorithm IDs, most preferred first.
+ * count  Number of algorithm IDs.
+ * returns BAD_FUNC_ARG when ctx or algs is NULL, count is out of range, or an
+ *         algorithm is not supported, MEMORY_E on allocation failure and
+ *         WOLFSSL_SUCCESS on success.
+ */
+int wolfSSL_CTX_set_cert_compression_algs(WOLFSSL_CTX* ctx,
+    const enum wc_CompressionAlgs* algs, int count)
+{
+    if (ctx == NULL)
+        return BAD_FUNC_ARG;
+
+    return CertCompression_SetAlgs(&ctx->compressionAlgPrefList,
+        &ctx->compressionAlgPrefListLen, algs, count, ctx->heap);
+}
+
+/* Set the certificate compression algorithms to offer, in order of
+ * preference. Replaces the list inherited from the context, or the built-in
+ * default list.
+ *
+ * ssl    The SSL/TLS object.
+ * algs   RFC 8879 algorithm IDs, most preferred first.
+ * count  Number of algorithm IDs.
+ * returns BAD_FUNC_ARG when ssl or algs is NULL, count is out of range, or an
+ *         algorithm is not supported, MEMORY_E on allocation failure and
+ *         WOLFSSL_SUCCESS on success.
+ */
+int wolfSSL_set_cert_compression_algs(WOLFSSL* ssl,
+    const enum wc_CompressionAlgs* algs, int count)
+{
+    if (ssl == NULL)
+        return BAD_FUNC_ARG;
+
+    return CertCompression_SetAlgs(&ssl->compressionAlgPrefList,
+        &ssl->compressionAlgPrefListLen, algs, count, ssl->heap);
+}
+#endif /* WOLFSSL_CERT_COMPRESSION */
 /* Do not send a ticket after TLS v1.3 handshake for resumption.
  *
  * ssl  The SSL/TLS object.
