@@ -11849,6 +11849,7 @@ static int EdDSA_Update(WOLFSSL* ssl, const byte* data, int sz)
 int HashRaw(WOLFSSL* ssl, const byte* data, int sz)
 {
     int ret = 0;
+    byte mac = no_mac; /* no_mac: update every transcript */
 #ifdef WOLFSSL_DEBUG_TLS
     byte digest[WC_MAX_DIGEST_SIZE];
 
@@ -11865,6 +11866,20 @@ int HashRaw(WOLFSSL* ssl, const byte* data, int sz)
         return BAD_FUNC_ARG;
     }
 
+#ifdef WOLFSSL_TLS13
+    /* In TLS 1.3 the suite, and so the transcript hash, is fixed once a
+     * ServerHello or HelloRetryRequest has been processed: a ServerHello
+     * after an HRR must use the HRR's suite (DoTls13ServerHello). From then
+     * on only ssl->specs.mac_algorithm's transcript is read (GetMsgHash,
+     * Tls13DeriveKey), so skip the rest. Note the client also sets
+     * SERVER_HELLO_COMPLETE while processing an HRR, so the ECH HRR
+     * acceptance hashing into hsHashesEch updates only that transcript. */
+    if (IsAtLeastTLSv1_3(ssl->version) &&
+            ssl->options.serverState >= SERVER_HELLO_COMPLETE) {
+        mac = ssl->specs.mac_algorithm;
+    }
+#endif
+
 #if defined(WOLFSSL_RENESAS_TSIP_TLS)
     ret = tsip_StoreMessage(ssl, data, sz);
     if (ret != 0 && ret != WC_NO_ERR_TRACE(CRYPTOCB_UNAVAILABLE)) {
@@ -11874,52 +11889,65 @@ int HashRaw(WOLFSSL* ssl, const byte* data, int sz)
 
 #if !defined(NO_SHA) && (!defined(NO_OLD_TLS) || \
                           defined(WOLFSSL_ALLOW_TLS_SHA1))
-    wc_ShaUpdate(&ssl->hsHashes->hashSha, data, (word32)(sz));
+    if (mac == no_mac || mac == sha_mac)
+        wc_ShaUpdate(&ssl->hsHashes->hashSha, data, (word32)(sz));
 #endif
 #if !defined(NO_MD5) && !defined(NO_OLD_TLS)
-    wc_Md5Update(&ssl->hsHashes->hashMd5, data, (word32)(sz));
+    if (mac == no_mac || mac == md5_mac)
+        wc_Md5Update(&ssl->hsHashes->hashMd5, data, (word32)(sz));
 #endif
 
     if (IsAtLeastTLSv1_2(ssl)) {
     #ifndef NO_SHA256
-        ret = wc_Sha256Update(&ssl->hsHashes->hashSha256, data, (word32)sz);
-        if (ret != 0)
-            return ret;
+        if (mac == no_mac || mac == sha256_mac) {
+            ret = wc_Sha256Update(&ssl->hsHashes->hashSha256, data,
+                                  (word32)sz);
+            if (ret != 0)
+                return ret;
     #ifdef WOLFSSL_DEBUG_TLS
-        WOLFSSL_MSG("Sha256");
-        wc_Sha256GetHash(&ssl->hsHashes->hashSha256, digest);
-        WOLFSSL_BUFFER(digest, WC_SHA256_DIGEST_SIZE);
+            WOLFSSL_MSG("Sha256");
+            wc_Sha256GetHash(&ssl->hsHashes->hashSha256, digest);
+            WOLFSSL_BUFFER(digest, WC_SHA256_DIGEST_SIZE);
     #endif
+        }
     #endif
     #ifdef WOLFSSL_SHA384
-        ret = wc_Sha384Update(&ssl->hsHashes->hashSha384, data, (word32)sz);
-        if (ret != 0)
-            return ret;
+        if (mac == no_mac || mac == sha384_mac) {
+            ret = wc_Sha384Update(&ssl->hsHashes->hashSha384, data,
+                                  (word32)sz);
+            if (ret != 0)
+                return ret;
     #ifdef WOLFSSL_DEBUG_TLS
-        WOLFSSL_MSG("Sha384");
-        wc_Sha384GetHash(&ssl->hsHashes->hashSha384, digest);
-        WOLFSSL_BUFFER(digest, WC_SHA384_DIGEST_SIZE);
+            WOLFSSL_MSG("Sha384");
+            wc_Sha384GetHash(&ssl->hsHashes->hashSha384, digest);
+            WOLFSSL_BUFFER(digest, WC_SHA384_DIGEST_SIZE);
     #endif
+        }
     #endif
     #ifdef WOLFSSL_HS_HASH_SHA512
-        ret = wc_Sha512Update(&ssl->hsHashes->hashSha512, data, (word32)sz);
-        if (ret != 0)
-            return ret;
+        if (mac == no_mac || mac == sha512_mac) {
+            ret = wc_Sha512Update(&ssl->hsHashes->hashSha512, data,
+                                  (word32)sz);
+            if (ret != 0)
+                return ret;
     #ifdef WOLFSSL_DEBUG_TLS
-        WOLFSSL_MSG("Sha512");
-        wc_Sha512GetHash(&ssl->hsHashes->hashSha512, digest);
-        WOLFSSL_BUFFER(digest, WC_SHA512_DIGEST_SIZE);
+            WOLFSSL_MSG("Sha512");
+            wc_Sha512GetHash(&ssl->hsHashes->hashSha512, digest);
+            WOLFSSL_BUFFER(digest, WC_SHA512_DIGEST_SIZE);
     #endif
+        }
     #endif
     #ifdef WOLFSSL_SM3
-        ret = wc_Sm3Update(&ssl->hsHashes->hashSm3, data, sz);
-        if (ret != 0)
-            return ret;
+        if (mac == no_mac || mac == sm3_mac) {
+            ret = wc_Sm3Update(&ssl->hsHashes->hashSm3, data, sz);
+            if (ret != 0)
+                return ret;
     #ifdef WOLFSSL_DEBUG_TLS
-        WOLFSSL_MSG("SM3");
-        wc_Sm3GetHash(&ssl->hsHashes->hashSm3, digest);
-        WOLFSSL_BUFFER(digest, WC_SM3_DIGEST_SIZE);
+            WOLFSSL_MSG("SM3");
+            wc_Sm3GetHash(&ssl->hsHashes->hashSm3, digest);
+            WOLFSSL_BUFFER(digest, WC_SM3_DIGEST_SIZE);
     #endif
+        }
     #endif
     #if !defined(WOLFSSL_NO_CLIENT_AUTH) && \
                ((defined(WOLFSSL_SM2) && defined(WOLFSSL_SM3)) || \
